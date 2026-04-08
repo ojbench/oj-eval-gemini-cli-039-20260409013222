@@ -92,9 +92,14 @@ public:
     // Element access
     T get(size_t i, size_t j) const {
         if (i >= n || j >= m) throw invalid_index();
-        for (size_t k = indptr[i]; k < indptr[i+1]; ++k) {
-            if (indices[k] == j) return data[k];
-            if (indices[k] > j) break;
+        size_t start = indptr[i];
+        size_t end = indptr[i+1];
+        size_t l = start, r = end;
+        while (l < r) {
+            size_t mid = l + (r - l) / 2;
+            if (indices[mid] == j) return data[mid];
+            if (indices[mid] < j) l = mid + 1;
+            else r = mid;
         }
         return T{};
     }
@@ -104,25 +109,23 @@ public:
         if (i >= n || j >= m) throw invalid_index();
         size_t start = indptr[i];
         size_t end = indptr[i+1];
-        for (size_t k = start; k < end; ++k) {
-            if (indices[k] == j) {
-                data[k] = value;
+        size_t l = start, r = end;
+        while (l < r) {
+            size_t mid = l + (r - l) / 2;
+            if (indices[mid] == j) {
+                data[mid] = value;
                 return;
             }
-            if (indices[k] > j) {
-                indices.insert(indices.begin() + k, j);
-                data.insert(data.begin() + k, value);
-                for (size_t r = i + 1; r <= n; ++r) {
-                    indptr[r]++;
-                }
-                count++;
-                return;
-            }
+            if (indices[mid] < j) l = mid + 1;
+            else r = mid;
         }
-        indices.insert(indices.begin() + end, j);
-        data.insert(data.begin() + end, value);
-        for (size_t r = i + 1; r <= n; ++r) {
-            indptr[r]++;
+        
+        if (value == T{}) return;
+        
+        indices.insert(indices.begin() + l, j);
+        data.insert(data.begin() + l, value);
+        for (size_t r_idx = i + 1; r_idx <= n; ++r_idx) {
+            indptr[r_idx]++;
         }
         count++;
     }
@@ -150,9 +153,11 @@ public:
         if (vec.size() != m) throw size_mismatch();
         std::vector<T> res(n, T{});
         for (size_t i = 0; i < n; ++i) {
+            T sum = T{};
             for (size_t k = indptr[i]; k < indptr[i+1]; ++k) {
-                res[i] = res[i] + data[k] * vec[indices[k]];
+                sum = sum + data[k] * vec[indices[k]];
             }
+            res[i] = sum;
         }
         return res;
     }
@@ -163,16 +168,13 @@ public:
         size_t new_n = r - l;
         size_t new_count = indptr[r] - indptr[l];
         std::vector<size_t> new_indptr(new_n + 1, 0);
-        std::vector<size_t> new_indices(new_count);
-        std::vector<T> new_data(new_count);
         
         for (size_t i = 0; i < new_n; ++i) {
             new_indptr[i+1] = indptr[l + i + 1] - indptr[l];
         }
-        for (size_t k = 0; k < new_count; ++k) {
-            new_indices[k] = indices[indptr[l] + k];
-            new_data[k] = data[indptr[l] + k];
-        }
+        
+        std::vector<size_t> new_indices(indices.begin() + indptr[l], indices.begin() + indptr[r]);
+        std::vector<T> new_data(data.begin() + indptr[l], data.begin() + indptr[r]);
         
         return CSRMatrix(new_n, m, new_count, new_indptr, new_indices, new_data);
     }
